@@ -113,7 +113,7 @@ services:
     command:
       - --config=/root/config/prometheus.yml
     ports:
-      - "127.0.0.1:9877:8080"   # ← Porta alterada (9877 no host → 8080 no container)
+      - "127.0.0.1:8080:8080"
     labels:
       - traefik.enable=true
       - traefik.http.routers.signoz.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
@@ -129,7 +129,7 @@ services:
       - traefik.http.middlewares.signoz.headers.STSIncludeSubdomains=true
       - traefik.http.middlewares.signoz.headers.STSPreload=true
       - traefik.http.routers.signoz.middlewares=signoz@docker
-      - traefik.http.services.signoz.loadbalancer.server.port=8080   # Porta interna continua 8080
+      - traefik.http.services.signoz.loadbalancer.server.port=8080
     volumes:
       - ../common/signoz/prometheus.yml:/root/config/prometheus.yml
       - ../common/dashboards:/root/config/dashboards
@@ -198,6 +198,28 @@ services:
       - --dsn=tcp://clickhouse:9000
       - --up=
     restart: on-failure
+
+  azure-collector:
+    !!merge <<: *common
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: signoz-azure-collector
+    command:
+      - --config=/etc/azure-collector-config.yaml
+    volumes:
+      - ./azure-collector-config.yaml:/etc/azure-collector-config.yaml
+    environment:
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:13133"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   signoz-net:

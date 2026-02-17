@@ -1,0 +1,52 @@
+receivers:
+  azuremonitor:
+    subscription_id: ${env:AZURE_SUBSCRIPTION_ID}
+    tenant_id: ${env:AZURE_TENANT_ID}
+    client_id: ${env:AZURE_CLIENT_ID}
+    client_secret: ${env:AZURE_CLIENT_SECRET}
+    collection_interval: 60s
+    resource_groups:
+      - "rg-development-eastus"
+      - "rg-production-eastus"
+    metrics:
+      - resource_type: Microsoft.Web/sites
+        metrics:
+          - name: CpuTime
+            aggregation: Total
+          - name: MemoryWorkingSet
+            aggregation: Average
+          - name: Requests
+            aggregation: Total
+          - name: Http2xx
+            aggregation: Total
+          - name: Http4xx
+            aggregation: Total
+          - name: Http5xx
+            aggregation: Total
+          - name: ResponseTime
+            aggregation: Average
+          - name: BytesReceived
+            aggregation: Total
+          - name: BytesSent
+            aggregation: Total
+
+processors:
+  batch:
+    timeout: 10s
+
+exporters:
+  otlp:
+    endpoint: signoz-otel-collector:4317
+    tls:
+      insecure: true
+
+extensions:
+  health_check: {}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [azuremonitor]
+      processors: [batch]
+      exporters: [otlp]
