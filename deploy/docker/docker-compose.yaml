@@ -1,7 +1,6 @@
 x-common: &common
   networks:
     - signoz-net
-    - proxy-net
   restart: unless-stopped
   logging:
     options:
@@ -192,8 +191,6 @@ services:
 networks:
   signoz-net:
     name: signoz-net
-  proxy-net:
-    external: true
 volumes:
   clickhouse:
     name: signoz-clickhouse
