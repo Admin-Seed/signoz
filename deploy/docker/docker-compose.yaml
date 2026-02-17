@@ -201,7 +201,7 @@ services:
 
   azure-collector:
     !!merge <<: *common
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.96.0
     container_name: signoz-azure-collector
     command:
       - --config=/etc/azure-collector-config.yaml
