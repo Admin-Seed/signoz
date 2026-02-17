@@ -33,6 +33,27 @@ receivers:
       resource_groups:
         - "rg-development-eastus"
         - "rg-production-eastus"
+      metrics:
+        - resource_type: Microsoft.Web/sites
+        metrics:
+          - name: CpuTime
+            aggregation: Total
+          - name: MemoryWorkingSet
+            aggregation: Average
+          - name: Requests
+            aggregation: Total
+          - name: Http2xx
+            aggregation: Total
+          - name: Http4xx
+            aggregation: Total
+          - name: Http5xx
+            aggregation: Total
+          - name: ResponseTime
+            aggregation: Average
+          - name: BytesReceived
+            aggregation: Total
+          - name: BytesSent
+            aggregation: Total
 
 processors:
   batch:
