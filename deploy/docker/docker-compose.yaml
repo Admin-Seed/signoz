@@ -83,9 +83,9 @@ services:
     !!merge <<: *zookeeper-defaults
     container_name: signoz-zookeeper-1
     # ports:
-    #   - "2181:2181"
-    #   - "2888:2888"
-    #   - "3888:3888"
+    # - "2181:2181"
+    # - "2888:2888"
+    # - "3888:3888"
     volumes:
       - zookeeper-1:/bitnami/zookeeper
     environment:
@@ -98,9 +98,9 @@ services:
     !!merge <<: *clickhouse-defaults
     container_name: signoz-clickhouse
     # ports:
-    #   - "9000:9000"
-    #   - "8123:8123"
-    #   - "9181:9181"
+    # - "9000:9000"
+    # - "8123:8123"
+    # - "9181:9181"
     volumes:
       - ../common/clickhouse/config.xml:/etc/clickhouse-server/config.xml
       - ../common/clickhouse/users.xml:/etc/clickhouse-server/users.xml
@@ -116,8 +116,23 @@ services:
     command:
       - --config=/root/config/prometheus.yml
     ports:
-      - "8080:8080" # signoz port
-    #   - "6060:6060"     # pprof port
+      - "127.0.0.1:8080:8080"  # Expõe apenas localmente pro Traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.signoz.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
+      - traefik.http.routers.signoz.tls=true
+      - traefik.http.routers.signoz.entrypoints=web,websecure
+      - traefik.http.routers.signoz.tls.certresolver=mydnschallenge
+      - traefik.http.middlewares.signoz.headers.SSLRedirect=true
+      - traefik.http.middlewares.signoz.headers.STSSeconds=315360000
+      - traefik.http.middlewares.signoz.headers.browserXSSFilter=true
+      - traefik.http.middlewares.signoz.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.signoz.headers.forceSTSHeader=true
+      - traefik.http.middlewares.signoz.headers.SSLHost=${DOMAIN_NAME}
+      - traefik.http.middlewares.signoz.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.signoz.headers.STSPreload=true
+      - traefik.http.routers.signoz.middlewares=signoz@docker
+      - traefik.http.services.signoz.loadbalancer.server.port=8080  # Porta interna do SigNoz
     volumes:
       - ../common/signoz/prometheus.yml:/root/config/prometheus.yml
       - ../common/dashboards:/root/config/dashboards
@@ -157,7 +172,7 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=host.name=signoz-host,os.type=linux
       - LOW_CARDINAL_EXCEPTION_GROUPING=false
     ports:
-      # - "1777:1777"     # pprof extension
+      # - "1777:1777" # pprof extension
       - "4317:4317" # OTLP gRPC receiver
       - "4318:4318" # OTLP HTTP receiver
     depends_on:
@@ -184,6 +199,32 @@ services:
       - --dsn=tcp://clickhouse:9000
       - --up=
     restart: on-failure
+  traefik:
+    image: traefik:latest
+    restart: always
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.mydnschallenge.acme.dnschallenge=true
+      - --certificatesresolvers.mydnschallenge.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.mydnschallenge.acme.email=${SSL_EMAIL}
+      - --certificatesresolvers.mydnschallenge.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - traefik_data:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    networks:
+      - signoz-net  # Mesma network do SigNoz
+
 networks:
   signoz-net:
     name: signoz-net
@@ -194,3 +235,4 @@ volumes:
     name: signoz-sqlite
   zookeeper-1:
     name: signoz-zookeeper-1
+  traefik_data:  # Novo volume pro Traefik
