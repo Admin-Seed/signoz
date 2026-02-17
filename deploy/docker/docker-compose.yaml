@@ -113,7 +113,7 @@ services:
     command:
       - --config=/root/config/prometheus.yml
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9877:8080"
     labels:
       - traefik.enable=true
       - traefik.http.routers.signoz.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
