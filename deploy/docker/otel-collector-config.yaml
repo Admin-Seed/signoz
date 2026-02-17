@@ -24,36 +24,14 @@ receivers:
               labels:
                 job_name: otel-collector
   azuremonitor:
-      subscription_ids: ["${AZURE_SUBSCRIPTION_ID}"]
-      credentials: "service_principal"
-      tenant_id: "${AZURE_TENANT_ID}"
-      client_id: "${AZURE_CLIENT_ID}"
-      client_secret: "${AZURE_CLIENT_SECRET}"
-      collection_interval: 60s
-      resource_groups:
-        - "rg-development-eastus"
-        - "rg-production-eastus"
-      metrics:
-        - resource_type: Microsoft.Web/sites
-        metrics:
-          - name: CpuTime
-            aggregation: Total
-          - name: MemoryWorkingSet
-            aggregation: Average
-          - name: Requests
-            aggregation: Total
-          - name: Http2xx
-            aggregation: Total
-          - name: Http4xx
-            aggregation: Total
-          - name: Http5xx
-            aggregation: Total
-          - name: ResponseTime
-            aggregation: Average
-          - name: BytesReceived
-            aggregation: Total
-          - name: BytesSent
-            aggregation: Total
+    subscription_id: "${AZURE_SUBSCRIPTION_ID}"
+    tenant_id: "${AZURE_TENANT_ID}"
+    client_id: "${AZURE_CLIENT_ID}"
+    client_secret: "${AZURE_CLIENT_SECRET}"
+    collection_interval: 60s
+    resource_groups:
+      - "rg-development-eastus"
+      - "rg-production-eastus"
 
 processors:
   batch:
