@@ -6,6 +6,7 @@ x-common: &common
     options:
       max-size: 50m
       max-file: "3"
+
 x-clickhouse-defaults: &clickhouse-defaults
   !!merge <<: *common
   image: clickhouse/clickhouse-server:25.5.6
@@ -36,6 +37,7 @@ x-clickhouse-defaults: &clickhouse-defaults
       hard: 262144
   environment:
     - CLICKHOUSE_SKIP_USER_SETUP=1
+
 x-zookeeper-defaults: &zookeeper-defaults
   !!merge <<: *common
   image: signoz/zookeeper:3.7.1
@@ -51,6 +53,7 @@ x-zookeeper-defaults: &zookeeper-defaults
     interval: 30s
     timeout: 5s
     retries: 3
+
 x-db-depend: &db-depend
   !!merge <<: *common
   depends_on:
@@ -58,6 +61,7 @@ x-db-depend: &db-depend
       condition: service_healthy
     schema-migrator-sync:
       condition: service_completed_successfully
+
 services:
   init-clickhouse:
     !!merge <<: *common
@@ -78,6 +82,7 @@ services:
     restart: on-failure
     volumes:
       - ../common/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
+
   zookeeper-1:
     !!merge <<: *zookeeper-defaults
     container_name: signoz-zookeeper-1
@@ -89,6 +94,7 @@ services:
       - ZOO_AUTOPURGE_INTERVAL=1
       - ZOO_ENABLE_PROMETHEUS_METRICS=yes
       - ZOO_PROMETHEUS_METRICS_PORT_NUMBER=9141
+
   clickhouse:
     !!merge <<: *clickhouse-defaults
     container_name: signoz-clickhouse
@@ -99,6 +105,7 @@ services:
       - ../common/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
       - ../common/clickhouse/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
       - clickhouse:/var/lib/clickhouse/
+
   signoz:
     !!merge <<: *db-depend
     image: signoz/signoz:${VERSION:-v0.111.0}
@@ -106,7 +113,7 @@ services:
     command:
       - --config=/root/config/prometheus.yml
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9877:8080"   # ← Porta alterada (9877 no host → 8080 no container)
     labels:
       - traefik.enable=true
       - traefik.http.routers.signoz.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
@@ -122,7 +129,7 @@ services:
       - traefik.http.middlewares.signoz.headers.STSIncludeSubdomains=true
       - traefik.http.middlewares.signoz.headers.STSPreload=true
       - traefik.http.routers.signoz.middlewares=signoz@docker
-      - traefik.http.services.signoz.loadbalancer.server.port=8080
+      - traefik.http.services.signoz.loadbalancer.server.port=8080   # Porta interna continua 8080
     volumes:
       - ../common/signoz/prometheus.yml:/root/config/prometheus.yml
       - ../common/dashboards:/root/config/dashboards
@@ -147,6 +154,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
   otel-collector:
     !!merge <<: *db-depend
     image: signoz/signoz-otel-collector:${OTELCOL_TAG:-v0.142.0}
@@ -167,6 +175,7 @@ services:
     depends_on:
       signoz:
         condition: service_healthy
+
   schema-migrator-sync:
     !!merge <<: *common
     image: signoz/signoz-schema-migrator:${OTELCOL_TAG:-v0.142.0}
@@ -179,6 +188,7 @@ services:
       clickhouse:
         condition: service_healthy
     restart: on-failure
+
   schema-migrator-async:
     !!merge <<: *db-depend
     image: signoz/signoz-schema-migrator:${OTELCOL_TAG:-v0.142.0}
@@ -188,9 +198,11 @@ services:
       - --dsn=tcp://clickhouse:9000
       - --up=
     restart: on-failure
+
 networks:
   signoz-net:
     name: signoz-net
+
 volumes:
   clickhouse:
     name: signoz-clickhouse
