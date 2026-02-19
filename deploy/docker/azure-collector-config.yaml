@@ -8,6 +8,9 @@ receivers:
     resource_groups:
       - "rg-development-eastus"
       - "rg-production-eastus"
+      - "rg-integration-eastus"
+      - "rg-seed-sql-brs"
+      - "rg-api-eastus"
 
 processors:
   batch:
