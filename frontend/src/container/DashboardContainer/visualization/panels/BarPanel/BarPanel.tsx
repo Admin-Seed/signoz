@@ -96,6 +96,7 @@ function BarPanel(props: PanelWrapperProps): JSX.Element {
 				config={config}
 				alignedData={chartData}
 				yAxisUnit={widget.yAxisUnit}
+				decimalPrecision={widget.decimalPrecision}
 				onCancel={onToggleModelHandler}
 			/>
 		);
@@ -105,6 +106,7 @@ function BarPanel(props: PanelWrapperProps): JSX.Element {
 		chartData,
 		widget.yAxisUnit,
 		onToggleModelHandler,
+		widget.decimalPrecision,
 	]);
 
 	const onPlotDestroy = useCallback(() => {
@@ -127,12 +129,12 @@ function BarPanel(props: PanelWrapperProps): JSX.Element {
 					onDestroy={onPlotDestroy}
 					yAxisUnit={widget.yAxisUnit}
 					decimalPrecision={widget.decimalPrecision}
-					timezone={timezone.value}
 					data={chartData as uPlot.AlignedData}
 					width={containerDimensions.width}
 					height={containerDimensions.height}
 					layoutChildren={layoutChildren}
 					isStackedBarChart={widget.stackedBarChart ?? false}
+					timezone={timezone}
 				>
 					<ContextMenu
 						coordinates={coordinates}

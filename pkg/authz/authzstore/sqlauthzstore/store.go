@@ -26,7 +26,7 @@ func (store *store) Create(ctx context.Context, role *roletypes.StorableRole) er
 		Model(role).
 		Exec(ctx)
 	if err != nil {
-		return store.sqlstore.WrapAlreadyExistsErrf(err, errors.CodeAlreadyExists, "role with id: %s already exists", role.ID)
+		return store.sqlstore.WrapAlreadyExistsErrf(err, errors.CodeAlreadyExists, "role with name: %s already exists", role.Name)
 	}
 
 	return nil
@@ -94,6 +94,39 @@ func (store *store) ListByOrgIDAndNames(ctx context.Context, orgID valuer.UUID, 
 		Scan(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(roles) != len(names) {
+		return nil, store.sqlstore.WrapNotFoundErrf(
+			nil,
+			roletypes.ErrCodeRoleNotFound,
+			"not all roles found for the provided names: %v", names,
+		)
+	}
+
+	return roles, nil
+}
+
+func (store *store) ListByOrgIDAndIDs(ctx context.Context, orgID valuer.UUID, ids []valuer.UUID) ([]*roletypes.StorableRole, error) {
+	roles := make([]*roletypes.StorableRole, 0)
+	err := store.
+		sqlstore.
+		BunDBCtx(ctx).
+		NewSelect().
+		Model(&roles).
+		Where("org_id = ?", orgID).
+		Where("id IN (?)", bun.In(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(roles) != len(ids) {
+		return nil, store.sqlstore.WrapNotFoundErrf(
+			nil,
+			roletypes.ErrCodeRoleNotFound,
+			"not all roles found for the provided ids: %v", ids,
+		)
 	}
 
 	return roles, nil

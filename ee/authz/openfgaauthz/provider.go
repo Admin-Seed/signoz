@@ -62,10 +62,6 @@ func (provider *provider) Stop(ctx context.Context) error {
 	return provider.openfgaServer.Stop(ctx)
 }
 
-func (provider *provider) Check(ctx context.Context, tuple *openfgav1.TupleKey) error {
-	return provider.openfgaServer.Check(ctx, tuple)
-}
-
 func (provider *provider) CheckWithTupleCreation(ctx context.Context, claims authtypes.Claims, orgID valuer.UUID, relation authtypes.Relation, typeable authtypes.Typeable, selectors []authtypes.Selector, roleSelectors []authtypes.Selector) error {
 	return provider.openfgaServer.CheckWithTupleCreation(ctx, claims, orgID, relation, typeable, selectors, roleSelectors)
 }
@@ -74,8 +70,8 @@ func (provider *provider) CheckWithTupleCreationWithoutClaims(ctx context.Contex
 	return provider.openfgaServer.CheckWithTupleCreationWithoutClaims(ctx, orgID, relation, typeable, selectors, roleSelectors)
 }
 
-func (provider *provider) BatchCheck(ctx context.Context, tuples []*openfgav1.TupleKey) error {
-	return provider.openfgaServer.BatchCheck(ctx, tuples)
+func (provider *provider) BatchCheck(ctx context.Context, tupleReq map[string]*openfgav1.TupleKey) (map[string]*authtypes.TupleKeyAuthorization, error) {
+	return provider.openfgaServer.BatchCheck(ctx, tupleReq)
 }
 
 func (provider *provider) ListObjects(ctx context.Context, subject string, relation authtypes.Relation, typeable authtypes.Typeable) ([]*authtypes.Object, error) {
@@ -102,16 +98,20 @@ func (provider *provider) ListByOrgIDAndNames(ctx context.Context, orgID valuer.
 	return provider.pkgAuthzService.ListByOrgIDAndNames(ctx, orgID, names)
 }
 
-func (provider *provider) Grant(ctx context.Context, orgID valuer.UUID, name string, subject string) error {
-	return provider.pkgAuthzService.Grant(ctx, orgID, name, subject)
+func (provider *provider) ListByOrgIDAndIDs(ctx context.Context, orgID valuer.UUID, ids []valuer.UUID) ([]*roletypes.Role, error) {
+	return provider.pkgAuthzService.ListByOrgIDAndIDs(ctx, orgID, ids)
 }
 
-func (provider *provider) ModifyGrant(ctx context.Context, orgID valuer.UUID, existingRoleName string, updatedRoleName string, subject string) error {
-	return provider.pkgAuthzService.ModifyGrant(ctx, orgID, existingRoleName, updatedRoleName, subject)
+func (provider *provider) Grant(ctx context.Context, orgID valuer.UUID, names []string, subject string) error {
+	return provider.pkgAuthzService.Grant(ctx, orgID, names, subject)
 }
 
-func (provider *provider) Revoke(ctx context.Context, orgID valuer.UUID, name string, subject string) error {
-	return provider.pkgAuthzService.Revoke(ctx, orgID, name, subject)
+func (provider *provider) ModifyGrant(ctx context.Context, orgID valuer.UUID, existingRoleNames []string, updatedRoleNames []string, subject string) error {
+	return provider.pkgAuthzService.ModifyGrant(ctx, orgID, existingRoleNames, updatedRoleNames, subject)
+}
+
+func (provider *provider) Revoke(ctx context.Context, orgID valuer.UUID, names []string, subject string) error {
+	return provider.pkgAuthzService.Revoke(ctx, orgID, names, subject)
 }
 
 func (provider *provider) CreateManagedRoles(ctx context.Context, orgID valuer.UUID, managedRoles []*roletypes.Role) error {
@@ -175,8 +175,6 @@ func (provider *provider) GetResources(_ context.Context) []*authtypes.Resource 
 	for _, register := range provider.registry {
 		typeables = append(typeables, register.MustGetTypeables()...)
 	}
-	// role module cannot self register itself!
-	typeables = append(typeables, provider.MustGetTypeables()...)
 
 	resources := make([]*authtypes.Resource, 0)
 	for _, typeable := range typeables {
@@ -187,6 +185,11 @@ func (provider *provider) GetResources(_ context.Context) []*authtypes.Resource 
 }
 
 func (provider *provider) GetObjects(ctx context.Context, orgID valuer.UUID, id valuer.UUID, relation authtypes.Relation) ([]*authtypes.Object, error) {
+	_, err := provider.licensing.GetActive(ctx, orgID)
+	if err != nil {
+		return nil, errors.New(errors.TypeLicenseUnavailable, errors.CodeLicenseUnavailable, "a valid license is not available").WithAdditional("this feature requires a valid license").WithAdditional(err.Error())
+	}
+
 	storableRole, err := provider.store.Get(ctx, orgID, id)
 	if err != nil {
 		return nil, err
@@ -198,7 +201,7 @@ func (provider *provider) GetObjects(ctx context.Context, orgID valuer.UUID, id 
 			resourceObjects, err := provider.
 				ListObjects(
 					ctx,
-					authtypes.MustNewSubject(authtypes.TypeableRole, storableRole.ID.String(), orgID, &authtypes.RelationAssignee),
+					authtypes.MustNewSubject(authtypes.TypeableRole, storableRole.Name, orgID, &authtypes.RelationAssignee),
 					relation,
 					authtypes.MustNewTypeableFromType(resource.Type, resource.Name),
 				)
@@ -258,7 +261,7 @@ func (provider *provider) Delete(ctx context.Context, orgID valuer.UUID, id valu
 	}
 
 	role := roletypes.NewRoleFromStorableRole(storableRole)
-	err = role.CanEditDelete()
+	err = role.ErrIfManaged()
 	if err != nil {
 		return err
 	}

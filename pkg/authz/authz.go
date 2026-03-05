@@ -14,17 +14,14 @@ import (
 type AuthZ interface {
 	factory.Service
 
-	// Check returns error when the upstream authorization server is unavailable or the subject (s) doesn't have relation (r) on object (o).
-	Check(context.Context, *openfgav1.TupleKey) error
-
 	// CheckWithTupleCreation takes upon the responsibility for generating the tuples alongside everything Check does.
 	CheckWithTupleCreation(context.Context, authtypes.Claims, valuer.UUID, authtypes.Relation, authtypes.Typeable, []authtypes.Selector, []authtypes.Selector) error
 
 	// CheckWithTupleCreationWithoutClaims checks permissions for anonymous users.
 	CheckWithTupleCreationWithoutClaims(context.Context, valuer.UUID, authtypes.Relation, authtypes.Typeable, []authtypes.Selector, []authtypes.Selector) error
 
-	// Batch Check returns error when the upstream authorization server is unavailable or for all the tuples of subject (s) doesn't have relation (r) on object (o).
-	BatchCheck(context.Context, []*openfgav1.TupleKey) error
+	// BatchCheck accepts a map of ID → tuple and returns a map of ID → authorization result.
+	BatchCheck(context.Context, map[string]*openfgav1.TupleKey) (map[string]*authtypes.TupleKeyAuthorization, error)
 
 	// Write accepts the insertion tuples and the deletion tuples.
 	Write(context.Context, []*openfgav1.TupleKey, []*openfgav1.TupleKey) error
@@ -65,14 +62,17 @@ type AuthZ interface {
 	//  Lists all the roles for the organization filtered by name
 	ListByOrgIDAndNames(context.Context, valuer.UUID, []string) ([]*roletypes.Role, error)
 
+	//  Lists all the roles for the organization filtered by ids
+	ListByOrgIDAndIDs(context.Context, valuer.UUID, []valuer.UUID) ([]*roletypes.Role, error)
+
 	// Grants a role to the subject based on role name.
-	Grant(context.Context, valuer.UUID, string, string) error
+	Grant(context.Context, valuer.UUID, []string, string) error
 
 	// Revokes a granted role from the subject based on role name.
-	Revoke(context.Context, valuer.UUID, string, string) error
+	Revoke(context.Context, valuer.UUID, []string, string) error
 
 	// Changes the granted role for the subject based on role name.
-	ModifyGrant(context.Context, valuer.UUID, string, string, string) error
+	ModifyGrant(context.Context, valuer.UUID, []string, []string, string) error
 
 	// Bootstrap the managed roles.
 	CreateManagedRoles(context.Context, valuer.UUID, []*roletypes.Role) error
@@ -101,6 +101,8 @@ type Handler interface {
 	Patch(http.ResponseWriter, *http.Request)
 
 	PatchObjects(http.ResponseWriter, *http.Request)
+
+	Check(http.ResponseWriter, *http.Request)
 
 	Delete(http.ResponseWriter, *http.Request)
 }
