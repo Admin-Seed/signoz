@@ -16,6 +16,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/factory"
 	"github.com/SigNoz/signoz/pkg/flagger"
 	"github.com/SigNoz/signoz/pkg/gateway"
+	"github.com/SigNoz/signoz/pkg/identn"
 	"github.com/SigNoz/signoz/pkg/instrumentation"
 	"github.com/SigNoz/signoz/pkg/licensing"
 	"github.com/SigNoz/signoz/pkg/modules/dashboard"
@@ -65,6 +66,7 @@ type SigNoz struct {
 	Sharder                sharder.Sharder
 	StatsReporter          statsreporter.StatsReporter
 	Tokenizer              pkgtokenizer.Tokenizer
+	IdentNResolver         identn.IdentNResolver
 	Authz                  authz.AuthZ
 	Modules                Modules
 	Handlers               Handlers
@@ -380,7 +382,7 @@ func New(
 		ctx,
 		providerSettings,
 		config.Global,
-		NewGlobalProviderFactories(),
+		NewGlobalProviderFactories(config.IdentN),
 		"signoz",
 	)
 	if err != nil {
@@ -389,6 +391,13 @@ func New(
 
 	// Initialize all modules
 	modules := NewModules(sqlstore, tokenizer, emailing, providerSettings, orgGetter, alertmanager, analytics, querier, telemetrystore, telemetryMetadataStore, authNs, authz, cache, queryParser, config, dashboard, userGetter)
+
+	// Initialize identN resolver
+	identNFactories := NewIdentNProviderFactories(sqlstore, tokenizer, orgGetter, userGetter, config.User)
+	identNResolver, err := identn.NewIdentNResolver(ctx, providerSettings, config.IdentN, identNFactories)
+	if err != nil {
+		return nil, err
+	}
 
 	userService := impluser.NewService(providerSettings, impluser.NewStore(sqlstore, providerSettings), modules.User, orgGetter, authz, config.User.Root)
 
@@ -403,7 +412,7 @@ func New(
 		ctx,
 		providerSettings,
 		config.APIServer,
-		NewAPIServerProviderFactories(orgGetter, authz, global, modules, handlers),
+		NewAPIServerProviderFactories(orgGetter, authz, modules, handlers),
 		"signoz",
 	)
 	if err != nil {
@@ -468,6 +477,7 @@ func New(
 		Emailing:               emailing,
 		Sharder:                sharder,
 		Tokenizer:              tokenizer,
+		IdentNResolver:         identNResolver,
 		Authz:                  authz,
 		Modules:                modules,
 		Handlers:               handlers,

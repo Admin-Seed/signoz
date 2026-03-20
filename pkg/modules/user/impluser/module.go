@@ -19,7 +19,6 @@ import (
 	"github.com/SigNoz/signoz/pkg/types/authtypes"
 	"github.com/SigNoz/signoz/pkg/types/emailtypes"
 	"github.com/SigNoz/signoz/pkg/types/integrationtypes"
-	"github.com/SigNoz/signoz/pkg/types/roletypes"
 	"github.com/SigNoz/signoz/pkg/valuer"
 	"github.com/dustin/go-humanize"
 )
@@ -48,54 +47,6 @@ func NewModule(store types.UserStore, tokenizer tokenizer.Tokenizer, emailing em
 		authz:     authz,
 		config:    config,
 	}
-}
-
-func (m *Module) AcceptInvite(ctx context.Context, token string, password string) (*types.User, error) {
-	// get the user by reset password token
-	user, err := m.store.GetUserByResetPasswordToken(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-
-	// update the password and delete the token
-	err = m.UpdatePasswordByResetPasswordToken(ctx, token, password)
-	if err != nil {
-		return nil, err
-	}
-
-	// query the user again
-	user, err = m.store.GetByOrgIDAndID(ctx, user.OrgID, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return user, nil
-}
-
-func (m *Module) GetInviteByToken(ctx context.Context, token string) (*types.Invite, error) {
-	// get the user
-	user, err := m.store.GetUserByResetPasswordToken(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-
-	// create a dummy invite obj for backward compatibility
-	invite := &types.Invite{
-		Identifiable: types.Identifiable{
-			ID: user.ID,
-		},
-		Name:  user.DisplayName,
-		Email: user.Email,
-		Token: token,
-		Role:  user.Role,
-		OrgID: user.OrgID,
-		TimeAuditable: types.TimeAuditable{
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-		},
-	}
-
-	return invite, nil
 }
 
 // CreateBulk implements invite.Module.
@@ -204,7 +155,7 @@ func (m *Module) CreateBulkInvite(ctx context.Context, orgID valuer.UUID, userID
 
 		resetLink := userWithToken.ResetPasswordToken.FactorPasswordResetLink(frontendBaseUrl)
 
-		tokenLifetime := m.config.Password.Reset.MaxTokenLifetime
+		tokenLifetime := m.config.Password.Invite.MaxTokenLifetime
 		humanizedTokenLifetime := strings.TrimSpace(humanize.RelTime(time.Now(), time.Now().Add(tokenLifetime), "", ""))
 
 		if err := m.emailing.SendHTML(ctx, userWithToken.User.Email.String(), "You're Invited to Join SigNoz", emailtypes.TemplateNameInvitationEmail, map[string]any{
@@ -219,51 +170,11 @@ func (m *Module) CreateBulkInvite(ctx context.Context, orgID valuer.UUID, userID
 	return invites, nil
 }
 
-func (m *Module) ListInvite(ctx context.Context, orgID string) ([]*types.Invite, error) {
-	// find all the users with pending_invite status
-	users, err := m.store.ListUsersByOrgID(ctx, valuer.MustNewUUID(orgID))
-	if err != nil {
-		return nil, err
-	}
-
-	pendingUsers := slices.DeleteFunc(users, func(user *types.User) bool { return user.Status != types.UserStatusPendingInvite })
-
-	var invites []*types.Invite
-
-	for _, pUser := range pendingUsers {
-		// get the reset password token
-		resetPasswordToken, err := m.GetOrCreateResetPasswordToken(ctx, pUser.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		// create a dummy invite obj for backward compatibility
-		invite := &types.Invite{
-			Identifiable: types.Identifiable{
-				ID: pUser.ID,
-			},
-			Name:  pUser.DisplayName,
-			Email: pUser.Email,
-			Token: resetPasswordToken.Token,
-			Role:  pUser.Role,
-			OrgID: pUser.OrgID,
-			TimeAuditable: types.TimeAuditable{
-				CreatedAt: pUser.CreatedAt,
-				UpdatedAt: pUser.UpdatedAt, // dummy
-			},
-		}
-
-		invites = append(invites, invite)
-	}
-
-	return invites, nil
-}
-
 func (module *Module) CreateUser(ctx context.Context, input *types.User, opts ...root.CreateUserOption) error {
 	createUserOpts := root.NewCreateUserOptions(opts...)
 
 	// since assign is idempotant multiple calls to assign won't cause issues in case of retries.
-	err := module.authz.Grant(ctx, input.OrgID, []string{roletypes.MustGetSigNozManagedRoleFromExistingRole(input.Role)}, authtypes.MustNewSubject(authtypes.TypeableUser, input.ID.StringValue(), input.OrgID, nil))
+	err := module.authz.Grant(ctx, input.OrgID, []string{authtypes.MustGetSigNozManagedRoleFromExistingRole(input.Role)}, authtypes.MustNewSubject(authtypes.TypeableUser, input.ID.StringValue(), input.OrgID, nil))
 	if err != nil {
 		return err
 	}
@@ -305,10 +216,6 @@ func (m *Module) UpdateUser(ctx context.Context, orgID valuer.UUID, id string, u
 		return nil, errors.WithAdditionalf(err, "cannot update deleted user")
 	}
 
-	if err := existingUser.ErrIfPending(); err != nil {
-		return nil, errors.WithAdditionalf(err, "cannot update pending user")
-	}
-
 	requestor, err := m.store.GetUser(ctx, valuer.MustNewUUID(updatedBy))
 	if err != nil {
 		return nil, err
@@ -333,8 +240,8 @@ func (m *Module) UpdateUser(ctx context.Context, orgID valuer.UUID, id string, u
 	if user.Role != "" && user.Role != existingUser.Role {
 		err = m.authz.ModifyGrant(ctx,
 			orgID,
-			[]string{roletypes.MustGetSigNozManagedRoleFromExistingRole(existingUser.Role)},
-			[]string{roletypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
+			[]string{authtypes.MustGetSigNozManagedRoleFromExistingRole(existingUser.Role)},
+			[]string{authtypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
 			authtypes.MustNewSubject(authtypes.TypeableUser, id, orgID, nil),
 		)
 		if err != nil {
@@ -395,7 +302,7 @@ func (module *Module) DeleteUser(ctx context.Context, orgID valuer.UUID, id stri
 	}
 
 	// since revoke is idempotant multiple calls to revoke won't cause issues in case of retries
-	err = module.authz.Revoke(ctx, orgID, []string{roletypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)}, authtypes.MustNewSubject(authtypes.TypeableUser, id, orgID, nil))
+	err = module.authz.Revoke(ctx, orgID, []string{authtypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)}, authtypes.MustNewSubject(authtypes.TypeableUser, id, orgID, nil))
 	if err != nil {
 		return err
 	}
@@ -461,7 +368,11 @@ func (module *Module) GetOrCreateResetPasswordToken(ctx context.Context, userID 
 	}
 
 	// create a new token
-	resetPasswordToken, err := types.NewResetPasswordToken(password.ID, time.Now().Add(module.config.Password.Reset.MaxTokenLifetime))
+	tokenLifetime := module.config.Password.Reset.MaxTokenLifetime
+	if user.Status == types.UserStatusPendingInvite {
+		tokenLifetime = module.config.Password.Invite.MaxTokenLifetime
+	}
+	resetPasswordToken, err := types.NewResetPasswordToken(password.ID, time.Now().Add(tokenLifetime))
 	if err != nil {
 		return nil, err
 	}
@@ -501,6 +412,9 @@ func (module *Module) ForgotPassword(ctx context.Context, orgID valuer.UUID, ema
 	resetLink := token.FactorPasswordResetLink(frontendBaseURL)
 
 	tokenLifetime := module.config.Password.Reset.MaxTokenLifetime
+	if user.Status == types.UserStatusPendingInvite {
+		tokenLifetime = module.config.Password.Invite.MaxTokenLifetime
+	}
 	humanizedTokenLifetime := strings.TrimSpace(humanize.RelTime(time.Now(), time.Now().Add(tokenLifetime), "", ""))
 
 	if err := module.emailing.SendHTML(
@@ -558,7 +472,7 @@ func (module *Module) UpdatePasswordByResetPasswordToken(ctx context.Context, to
 		if err = module.authz.Grant(
 			ctx,
 			user.OrgID,
-			[]string{roletypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
+			[]string{authtypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
 			authtypes.MustNewSubject(authtypes.TypeableUser, user.ID.StringValue(), user.OrgID, nil),
 		); err != nil {
 			return err
@@ -692,7 +606,7 @@ func (module *Module) CreateFirstUser(ctx context.Context, organization *types.O
 		return nil, err
 	}
 
-	managedRoles := roletypes.NewManagedRoles(organization.ID)
+	managedRoles := authtypes.NewManagedRoles(organization.ID)
 	err = module.authz.CreateManagedUserRoleTransactions(ctx, organization.ID, user.ID)
 	if err != nil {
 		return nil, err
@@ -793,7 +707,7 @@ func (module *Module) activatePendingUser(ctx context.Context, user *types.User)
 	err := module.authz.Grant(
 		ctx,
 		user.OrgID,
-		[]string{roletypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
+		[]string{authtypes.MustGetSigNozManagedRoleFromExistingRole(user.Role)},
 		authtypes.MustNewSubject(authtypes.TypeableUser, user.ID.StringValue(), user.OrgID, nil),
 	)
 	if err != nil {
