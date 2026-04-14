@@ -133,14 +133,14 @@ func (r *rule) GetStoredRulesByMetricName(ctx context.Context, orgID string, met
 	for _, storedRule := range storedRules {
 		var ruleData ruletypes.PostableRule
 		if err := json.Unmarshal([]byte(storedRule.Data), &ruleData); err != nil {
-			r.logger.WarnContext(ctx, "failed to unmarshal rule data", "rule_id", storedRule.ID.StringValue(), "error", err)
+			//nolint:sloglint
+			r.logger.WarnContext(ctx, "failed to unmarshal rule data", slog.String("rule.id", storedRule.ID.StringValue()), errors.Attr(err))
 			continue
 		}
 
 		// Check conditions: must be metric-based alert with valid composite query
 		if ruleData.AlertType != ruletypes.AlertTypeMetric ||
-			ruleData.RuleCondition == nil ||
-			ruleData.RuleCondition.CompositeQuery == nil {
+			ruleData.RuleCondition == nil {
 			continue
 		}
 
@@ -167,7 +167,7 @@ func (r *rule) GetStoredRulesByMetricName(ctx context.Context, orgID string, met
 				if spec, ok := queryEnvelope.Spec.(qbtypes.PromQuery); ok {
 					result, err := r.queryParser.AnalyzeQueryFilter(ctx, qbtypes.QueryTypePromQL, spec.Query)
 					if err != nil {
-						r.logger.WarnContext(ctx, "failed to parse PromQL query", "query", spec.Query, "error", err)
+						r.logger.WarnContext(ctx, "failed to parse PromQL query", slog.String("query", spec.Query), errors.Attr(err))
 						continue
 					}
 					if slices.Contains(result.MetricNames, metricName) {
@@ -179,7 +179,7 @@ func (r *rule) GetStoredRulesByMetricName(ctx context.Context, orgID string, met
 				if spec, ok := queryEnvelope.Spec.(qbtypes.ClickHouseQuery); ok {
 					result, err := r.queryParser.AnalyzeQueryFilter(ctx, qbtypes.QueryTypeClickHouseSQL, spec.Query)
 					if err != nil {
-						r.logger.WarnContext(ctx, "failed to parse ClickHouse query", "query", spec.Query, "error", err)
+						r.logger.WarnContext(ctx, "failed to parse ClickHouse query", slog.String("query", spec.Query), errors.Attr(err))
 						continue
 					}
 					if slices.Contains(result.MetricNames, metricName) {

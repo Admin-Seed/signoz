@@ -5,30 +5,42 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/SigNoz/signoz/cmd"
+	"github.com/SigNoz/signoz/ee/auditor/otlphttpauditor"
 	"github.com/SigNoz/signoz/ee/authn/callbackauthn/oidccallbackauthn"
 	"github.com/SigNoz/signoz/ee/authn/callbackauthn/samlcallbackauthn"
 	"github.com/SigNoz/signoz/ee/authz/openfgaauthz"
-	eequerier "github.com/SigNoz/signoz/ee/querier"
 	"github.com/SigNoz/signoz/ee/authz/openfgaschema"
+	"github.com/SigNoz/signoz/ee/authz/openfgaserver"
 	"github.com/SigNoz/signoz/ee/gateway/httpgateway"
 	enterpriselicensing "github.com/SigNoz/signoz/ee/licensing"
 	"github.com/SigNoz/signoz/ee/licensing/httplicensing"
+	"github.com/SigNoz/signoz/ee/modules/cloudintegration/implcloudintegration"
+	"github.com/SigNoz/signoz/ee/modules/cloudintegration/implcloudintegration/implcloudprovider"
 	"github.com/SigNoz/signoz/ee/modules/dashboard/impldashboard"
+	eequerier "github.com/SigNoz/signoz/ee/querier"
 	enterpriseapp "github.com/SigNoz/signoz/ee/query-service/app"
 	"github.com/SigNoz/signoz/ee/sqlschema/postgressqlschema"
 	"github.com/SigNoz/signoz/ee/sqlstore/postgressqlstore"
 	enterprisezeus "github.com/SigNoz/signoz/ee/zeus"
 	"github.com/SigNoz/signoz/ee/zeus/httpzeus"
 	"github.com/SigNoz/signoz/pkg/analytics"
+	"github.com/SigNoz/signoz/pkg/auditor"
 	"github.com/SigNoz/signoz/pkg/authn"
 	"github.com/SigNoz/signoz/pkg/authz"
+	"github.com/SigNoz/signoz/pkg/errors"
 	"github.com/SigNoz/signoz/pkg/factory"
 	"github.com/SigNoz/signoz/pkg/gateway"
+	"github.com/SigNoz/signoz/pkg/global"
 	"github.com/SigNoz/signoz/pkg/licensing"
+	"github.com/SigNoz/signoz/pkg/modules/cloudintegration"
+	pkgcloudintegration "github.com/SigNoz/signoz/pkg/modules/cloudintegration/implcloudintegration"
 	"github.com/SigNoz/signoz/pkg/modules/dashboard"
 	pkgimpldashboard "github.com/SigNoz/signoz/pkg/modules/dashboard/impldashboard"
 	"github.com/SigNoz/signoz/pkg/modules/organization"
+	"github.com/SigNoz/signoz/pkg/modules/serviceaccount"
 	"github.com/SigNoz/signoz/pkg/querier"
 	"github.com/SigNoz/signoz/pkg/queryparser"
 	"github.com/SigNoz/signoz/pkg/signoz"
@@ -36,9 +48,9 @@ import (
 	"github.com/SigNoz/signoz/pkg/sqlstore"
 	"github.com/SigNoz/signoz/pkg/sqlstore/sqlstorehook"
 	"github.com/SigNoz/signoz/pkg/types/authtypes"
+	"github.com/SigNoz/signoz/pkg/types/cloudintegrationtypes"
 	"github.com/SigNoz/signoz/pkg/version"
 	"github.com/SigNoz/signoz/pkg/zeus"
-	"github.com/spf13/cobra"
 )
 
 func registerServer(parentCmd *cobra.Command, logger *slog.Logger) {
@@ -69,7 +81,7 @@ func runServer(ctx context.Context, config signoz.Config, logger *slog.Logger) e
 	// add enterprise sqlstore factories to the community sqlstore factories
 	sqlstoreFactories := signoz.NewSQLStoreProviderFactories()
 	if err := sqlstoreFactories.Add(postgressqlstore.NewFactory(sqlstorehook.NewLoggingFactory(), sqlstorehook.NewInstrumentationFactory())); err != nil {
-		logger.ErrorContext(ctx, "failed to add postgressqlstore factory", "error", err)
+		logger.ErrorContext(ctx, "failed to add postgressqlstore factory", errors.Attr(err))
 		return err
 	}
 
@@ -116,8 +128,12 @@ func runServer(ctx context.Context, config signoz.Config, logger *slog.Logger) e
 
 			return authNs, nil
 		},
-		func(ctx context.Context, sqlstore sqlstore.SQLStore, licensing licensing.Licensing, dashboardModule dashboard.Module) factory.ProviderFactory[authz.AuthZ, authz.Config] {
-			return openfgaauthz.NewProviderFactory(sqlstore, openfgaschema.NewSchema().Get(ctx), licensing, dashboardModule)
+		func(ctx context.Context, sqlstore sqlstore.SQLStore, licensing licensing.Licensing, dashboardModule dashboard.Module) (factory.ProviderFactory[authz.AuthZ, authz.Config], error) {
+			openfgaDataStore, err := openfgaserver.NewSQLStore(sqlstore)
+			if err != nil {
+				return nil, err
+			}
+			return openfgaauthz.NewProviderFactory(sqlstore, openfgaschema.NewSchema().Get(ctx), openfgaDataStore, licensing, dashboardModule), nil
 		},
 		func(store sqlstore.SQLStore, settings factory.ProviderSettings, analytics analytics.Analytics, orgGetter organization.Getter, queryParser queryparser.QueryParser, querier querier.Querier, licensing licensing.Licensing) dashboard.Module {
 			return impldashboard.NewModule(pkgimpldashboard.NewStore(store), settings, analytics, orgGetter, queryParser, querier, licensing)
@@ -125,44 +141,64 @@ func runServer(ctx context.Context, config signoz.Config, logger *slog.Logger) e
 		func(licensing licensing.Licensing) factory.ProviderFactory[gateway.Gateway, gateway.Config] {
 			return httpgateway.NewProviderFactory(licensing)
 		},
+		func(licensing licensing.Licensing) factory.NamedMap[factory.ProviderFactory[auditor.Auditor, auditor.Config]] {
+			factories := signoz.NewAuditorProviderFactories()
+			if err := factories.Add(otlphttpauditor.NewFactory(licensing, version.Info)); err != nil {
+				panic(err)
+			}
+			return factories
+		},
 		func(ps factory.ProviderSettings, q querier.Querier, a analytics.Analytics) querier.Handler {
 			communityHandler := querier.NewHandler(ps, q, a)
 			return eequerier.NewHandler(ps, q, communityHandler)
 		},
-	)
+		func(sqlStore sqlstore.SQLStore, global global.Global, zeus zeus.Zeus, gateway gateway.Gateway, licensing licensing.Licensing, serviceAccount serviceaccount.Module, config cloudintegration.Config) (cloudintegration.Module, error) {
+			defStore := pkgcloudintegration.NewServiceDefinitionStore()
+			awsCloudProviderModule, err := implcloudprovider.NewAWSCloudProvider(defStore)
+			if err != nil {
+				return nil, err
+			}
+			azureCloudProviderModule := implcloudprovider.NewAzureCloudProvider()
+			cloudProvidersMap := map[cloudintegrationtypes.CloudProviderType]cloudintegration.CloudProviderModule{
+				cloudintegrationtypes.CloudProviderTypeAWS:   awsCloudProviderModule,
+				cloudintegrationtypes.CloudProviderTypeAzure: azureCloudProviderModule,
+			}
 
+			return implcloudintegration.NewModule(pkgcloudintegration.NewStore(sqlStore), global, zeus, gateway, licensing, serviceAccount, cloudProvidersMap, config)
+		},
+	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create signoz", "error", err)
+		logger.ErrorContext(ctx, "failed to create signoz", errors.Attr(err))
 		return err
 	}
 
 	server, err := enterpriseapp.NewServer(config, signoz)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create server", "error", err)
+		logger.ErrorContext(ctx, "failed to create server", errors.Attr(err))
 		return err
 	}
 
 	if err := server.Start(ctx); err != nil {
-		logger.ErrorContext(ctx, "failed to start server", "error", err)
+		logger.ErrorContext(ctx, "failed to start server", errors.Attr(err))
 		return err
 	}
 
 	signoz.Start(ctx)
 
 	if err := signoz.Wait(ctx); err != nil {
-		logger.ErrorContext(ctx, "failed to start signoz", "error", err)
+		logger.ErrorContext(ctx, "failed to start signoz", errors.Attr(err))
 		return err
 	}
 
 	err = server.Stop(ctx)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to stop server", "error", err)
+		logger.ErrorContext(ctx, "failed to stop server", errors.Attr(err))
 		return err
 	}
 
 	err = signoz.Stop(ctx)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to stop signoz", "error", err)
+		logger.ErrorContext(ctx, "failed to stop signoz", errors.Attr(err))
 		return err
 	}
 
