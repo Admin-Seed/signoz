@@ -1,0 +1,71 @@
+# SigNoz deployment for seed-vm-services-eastus.
+#
+# This file is the ONLY input. `foundryctl forge -f casting.yaml` regenerates
+# everything under pours/. There is no fork and no upstream to merge from:
+# upstream removed deploy/docker/ at v0.130.0 and Foundry replaced it.
+#
+# To upgrade: bump the image tags below, re-run forge, commit, push.
+
+apiVersion: v1alpha1
+kind: Installation
+metadata:
+  name: signoz
+spec:
+  deployment:
+    flavor: compose
+    mode: docker
+
+  # Metastore MUST stay sqlite. Foundry defaults to Postgres; switching would
+  # silently abandon the existing signoz-sqlite volume (2 dashboards,
+  # 49 ttl_setting rows, 3 users) and start empty with no error.
+  metastore:
+    kind: sqlite
+
+  # Foundry default, and safe here: `SELECT count() FROM system.replicas` = 0
+  # and no table references a /clickhouse/tables/ path, so the outgoing
+  # ZooKeeper held only the ON CLUSTER DDL queue, which is disposable.
+  # Retires signoz/zookeeper:3.7.1 (October 2023).
+  telemetrykeeper:
+    kind: clickhousekeeper
+
+  signoz:
+    spec:
+      image: signoz/signoz:v0.141.1
+      env:
+        # Interpolated by docker compose from the .env Komodo writes, so the
+        # value never enters this repository. Replaces the upstream
+        # placeholder literal "secret" that was in use until now.
+        SIGNOZ_TOKENIZER_JWT_SECRET: ${SIGNOZ_TOKENIZER_JWT_SECRET}
+
+  ingester:
+    spec:
+      image: signoz/signoz-otel-collector:v0.144.9
+      env:
+        # Preserve the exact cluster semantics the existing schema was built
+        # with, so the migrator keeps emitting the same DDL shape.
+        SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER: cluster
+        SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION: "true"
+
+  telemetrystore:
+    spec:
+      image: clickhouse/clickhouse-server:25.12.5
+      config:
+        data:
+          # Carried verbatim from the outgoing deployment's system.macros.
+          config-0-0.yaml: |
+            macros:
+              shard: "01"
+              replica: "example01-01-1"
+
+  # Re-attach the two volumes that hold real state. Foundry's generated names
+  # differ from the running ones; without this the stack starts clean.
+  # The keeper and user-scripts volumes are intentionally left fresh.
+  patches:
+    - target: deployment/compose.yaml
+      operations:
+        - op: replace
+          path: /volumes/signoz-metastore-sqlite-0-data/name
+          value: signoz-sqlite
+        - op: replace
+          path: /volumes/signoz-telemetrystore-0-0-data/name
+          value: signoz-clickhouse

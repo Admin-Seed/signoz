@@ -1,0 +1,50 @@
+# Azure Monitor -> SigNoz. Runs as a standalone collector alongside the SigNoz
+# stack, which is the architecture SigNoz recommends: it keeps Azure-specific
+# pipeline logic out of SigNoz's own collector config, so neither side's
+# upgrades can break the other.
+
+extensions:
+  # The inline `credentials:` block used previously was deprecated in
+  # opentelemetry-collector-contrib v0.129.0 in favour of this extension.
+  azure_auth:
+    service_principal:
+      tenant_id: ${env:AZURE_TENANT_ID}
+      client_id: ${env:AZURE_CLIENT_ID}
+      client_secret: ${env:AZURE_CLIENT_SECRET}
+  health_check:
+    # Must bind 0.0.0.0, not the implicit localhost, to be reachable at all.
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  azuremonitor:
+    auth:
+      authenticator: azure_auth
+    # `subscription_id` (singular) was replaced by this list.
+    subscription_ids:
+      - ${env:AZURE_SUBSCRIPTION_ID}
+    collection_interval: 60s
+    resource_groups:
+      - "rg-development-eastus"
+      - "rg-production-eastus"
+      - "rg-integration-eastus"
+      - "rg-seed-sql-brs"
+      - "rg-api-eastus"
+
+processors:
+  batch:
+    timeout: 10s
+
+exporters:
+  otlp:
+    # Network alias of the SigNoz ingester on signoz-network.
+    endpoint: signoz-ingester:4317
+    tls:
+      insecure: true
+
+service:
+  extensions: [azure_auth, health_check]
+  pipelines:
+    metrics:
+      receivers: [azuremonitor]
+      processors: [batch]
+      exporters: [otlp]

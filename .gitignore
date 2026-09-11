@@ -1,0 +1,3 @@
+# Komodo writes this at deploy time; it holds live secrets.
+.env
+**/.env

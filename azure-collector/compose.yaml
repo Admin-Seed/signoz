@@ -1,0 +1,34 @@
+# Standalone Azure Monitor collector. Deployed as its own Komodo stack so it
+# can be upgraded independently of SigNoz.
+name: signoz-azure-collector
+
+services:
+  azure-collector:
+    image: otel/opentelemetry-collector-contrib:0.160.0
+    container_name: signoz-azure-collector
+    command:
+      - --config=/etc/azure-collector-config.yaml
+    volumes:
+      - ./azure-collector-config.yaml:/etc/azure-collector-config.yaml:ro
+    environment:
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+    networks:
+      - signoz-network
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: 50m
+        max-file: "3"
+    # NO healthcheck. This image is distroless: it contains only
+    # /otelcol-contrib, with no shell and no wget. The previous stack defined
+    # `test: [CMD, wget, ...]`, which could never execute -- it reported
+    # unhealthy continuously (FailingStreak 3985) while the collector itself
+    # was running. Liveness must be monitored from outside the container.
+
+networks:
+  signoz-network:
+    external: true
+    name: signoz-network
