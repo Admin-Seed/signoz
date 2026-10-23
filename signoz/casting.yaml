@@ -30,7 +30,7 @@ spec:
 
   signoz:
     spec:
-      image: signoz/signoz:v0.141.1
+      image: signoz/signoz:v0.147.0
       env:
         # Interpolated by docker compose from the .env Komodo writes, so the
         # value never enters this repository. Replaces the upstream
@@ -39,7 +39,7 @@ spec:
 
   ingester:
     spec:
-      image: signoz/signoz-otel-collector:v0.144.9
+      image: signoz/signoz-otel-collector:v0.144.15
       env:
         # Preserve the exact cluster semantics the existing schema was built
         # with, so the migrator keeps emitting the same DDL shape.

@@ -18,7 +18,7 @@ services:
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
     - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
-    image: signoz/signoz-otel-collector:v0.144.9
+    image: signoz/signoz-otel-collector:v0.144.15
     mem_limit: 768m
     networks:
       signoz-network:
@@ -50,7 +50,7 @@ services:
       - -q
       - http://localhost:8080/api/v1/health
       timeout: 10s
-    image: signoz/signoz:v0.141.1
+    image: signoz/signoz:v0.147.0
     mem_limit: 1g
     networks:
     - signoz-network
@@ -154,7 +154,7 @@ services:
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
     - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
-    image: signoz/signoz-otel-collector:v0.144.9
+    image: signoz/signoz-otel-collector:v0.144.15
     mem_limit: 512m
     networks:
     - signoz-network
