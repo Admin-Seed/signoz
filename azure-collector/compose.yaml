@@ -4,7 +4,7 @@ name: signoz-azure-collector
 
 services:
   azure-collector:
-    image: otel/opentelemetry-collector-contrib:0.160.0
+    image: otel/opentelemetry-collector-contrib:0.163.2
     container_name: signoz-azure-collector
     mem_limit: 256m
     command:
