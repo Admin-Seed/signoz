@@ -22,8 +22,6 @@ logger:
 macros:
   replica: example01-01-1
   shard: "01"
-metric_log:
-  "@remove": "1"
 part_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 path: /var/lib/clickhouse/
