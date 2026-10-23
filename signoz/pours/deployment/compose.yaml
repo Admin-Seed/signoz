@@ -33,7 +33,6 @@ services:
     - ./ingester/opamp.yaml:/etc/opamp-config.yaml:ro
   signoz-signoz-0:
     container_name: signoz-signoz-0
-    mem_limit: 1g
     environment:
     - SIGNOZ_SQLSTORE_PROVIDER=sqlite
     - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
@@ -52,6 +51,7 @@ services:
       - http://localhost:8080/api/v1/health
       timeout: 10s
     image: signoz/signoz:v0.141.1
+    mem_limit: 1g
     networks:
     - signoz-network
     ports:
@@ -61,7 +61,6 @@ services:
     - signoz-metastore-sqlite-0-data:/var/lib/signoz
   signoz-telemetrykeeper-clickhousekeeper-0:
     container_name: signoz-telemetrykeeper-clickhousekeeper-0
-    mem_limit: 512m
     entrypoint:
     - /usr/bin/clickhouse-keeper
     - --config-file=/etc/clickhouse-keeper/keeper.yaml
@@ -80,6 +79,7 @@ services:
       - ls
       timeout: 10s
     image: clickhouse/clickhouse-keeper:25.12.5
+    mem_limit: 512m
     networks:
     - signoz-network
     restart: unless-stopped
@@ -88,7 +88,6 @@ services:
     - ./telemetrykeeper/clickhousekeeper/keeper-0.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
   signoz-telemetrystore-clickhouse-0-0:
     container_name: signoz-telemetrystore-clickhouse-0-0
-    mem_limit: 2.5g
     depends_on:
       signoz-telemetrykeeper-clickhousekeeper-0:
         condition: service_healthy
@@ -109,6 +108,7 @@ services:
       - http://localhost:8123/ping
       timeout: 10s
     image: clickhouse/clickhouse-server:25.12.5
+    mem_limit: 2.5g
     networks:
     - signoz-network
     restart: unless-stopped
@@ -131,8 +131,8 @@ services:
       tar -xvzf histogram-quantile.tar.gz
       mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
     container_name: signoz-telemetrystore-clickhouse-user-scripts
-    mem_limit: 512m
     image: clickhouse/clickhouse-server:25.12.5
+    mem_limit: 512m
     networks:
     - signoz-network
     restart: on-failure
@@ -147,7 +147,6 @@ services:
       /signoz-otel-collector migrate sync up &&
       /signoz-otel-collector migrate async up
     container_name: signoz-telemetrystore-migrator
-    mem_limit: 512m
     entrypoint:
     - /bin/sh
     environment:
@@ -156,6 +155,7 @@ services:
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
     - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
     image: signoz/signoz-otel-collector:v0.144.9
+    mem_limit: 512m
     networks:
     - signoz-network
     restart: on-failure

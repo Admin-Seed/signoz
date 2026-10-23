@@ -69,3 +69,45 @@ spec:
         - op: replace
           path: /volumes/signoz-telemetrystore-0-0-data/name
           value: signoz-clickhouse
+
+        # Memory ceilings. On 2026-10-22 ClickHouse was free to take 6.98 GiB of
+        # a 7.8 GiB guest, OOMed mid-merge, corrupted two parts and then logged
+        # 105 GB of stack traces until the host disk was full. ClickHouse 25.x
+        # reads its cgroup limit, so the container cap also lowers
+        # max_server_memory_usage: 2.5g here gives 2.25 GiB internally.
+        # Values are roughly twice observed peak. These live here and not in
+        # pours/ because a forge discards anything hand-edited there.
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/mem_limit
+          value: 2.5g
+        - op: add
+          path: /services/signoz-signoz-0/mem_limit
+          value: 1g
+        - op: add
+          path: /services/ingester/mem_limit
+          value: 768m
+        - op: add
+          path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_limit
+          value: 512m
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-user-scripts/mem_limit
+          value: 512m
+        - op: add
+          path: /services/signoz-telemetrystore-migrator/mem_limit
+          value: 512m
+
+    # Remove system.metric_log. It is ClickHouse's own self-instrumentation at
+    # 3,300 columns, and its merges cannot complete: a part turns wide by BYTES
+    # while the vertical merge algorithm is chosen by ROWS, so merges run
+    # horizontally and allocate every column at once. TTL only applies as a side
+    # effect of a merge, so the declared one-day retention never ran and the
+    # table reached 280 parts and 3.65 GB -- 83% of the whole store. That is the
+    # root cause of the 2026-10-22 incident. See ADR-0011.
+    #
+    # Removing the KEY is what disables the table. An attribute of
+    # remove="1" parses but does nothing here, because remove is a config MERGE
+    # directive and there is nothing to merge over in the root config.
+    - target: deployment/telemetrystore/clickhouse/config-0-0.yaml
+      operations:
+        - op: remove
+          path: /metric_log

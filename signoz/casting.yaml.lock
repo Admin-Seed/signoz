@@ -333,7 +333,29 @@ spec:
     - op: replace
       path: /volumes/signoz-telemetrystore-0-0-data/name
       value: signoz-clickhouse
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/mem_limit
+      value: 2.5g
+    - op: add
+      path: /services/signoz-signoz-0/mem_limit
+      value: 1g
+    - op: add
+      path: /services/ingester/mem_limit
+      value: 768m
+    - op: add
+      path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_limit
+      value: 512m
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-user-scripts/mem_limit
+      value: 512m
+    - op: add
+      path: /services/signoz-telemetrystore-migrator/mem_limit
+      value: 512m
     target: deployment/compose.yaml
+  - operations:
+    - op: remove
+      path: /metric_log
+    target: deployment/telemetrystore/clickhouse/config-0-0.yaml
   signoz:
     spec:
       cluster:
