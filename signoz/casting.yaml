@@ -77,17 +77,63 @@ spec:
         # max_server_memory_usage: 2.5g here gives 2.25 GiB internally.
         # Values are roughly twice observed peak. These live here and not in
         # pours/ because a forge discards anything hand-edited there.
+        #
+        # 2026-11-03: the host is now an 8 vCPU / 31 GiB Azure VM, no longer the
+        # 7.8 GiB guest, and the old ceilings were tight: ClickHouse sat at 91%
+        # and Keeper at 97% of their limits, hitting them hundreds of times.
+        # Raised for the new host, but EVERY service keeps a ceiling: the
+        # 2026-10-22 incident was ClickHouse without one. 6g gives ClickHouse
+        # ~5.4 GiB internally. memswap_limit equal to mem_limit = no swap;
+        # mem_reservation is the steady-state working set.
         - op: add
           path: /services/signoz-telemetrystore-clickhouse-0-0/mem_limit
-          value: 2.5g
+          value: 6g
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/memswap_limit
+          value: 6g
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/mem_reservation
+          value: 3g
+        # Half the host's CPUs, so merges cannot starve CI and the other stacks.
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/cpus
+          value: 4
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/ulimits
+          value:
+            nofile:
+              soft: 262144
+              hard: 262144
+        # Let ClickHouse finish in-flight merges and flush before SIGKILL.
+        - op: add
+          path: /services/signoz-telemetrystore-clickhouse-0-0/stop_grace_period
+          value: 60s
         - op: add
           path: /services/signoz-signoz-0/mem_limit
-          value: 1g
+          value: 2g
+        - op: add
+          path: /services/signoz-signoz-0/memswap_limit
+          value: 2g
+        - op: add
+          path: /services/signoz-signoz-0/mem_reservation
+          value: 512m
         - op: add
           path: /services/ingester/mem_limit
-          value: 768m
+          value: 1g
+        - op: add
+          path: /services/ingester/memswap_limit
+          value: 1g
+        - op: add
+          path: /services/ingester/mem_reservation
+          value: 512m
         - op: add
           path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_limit
+          value: 1g
+        - op: add
+          path: /services/signoz-telemetrykeeper-clickhousekeeper-0/memswap_limit
+          value: 1g
+        - op: add
+          path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_reservation
           value: 512m
         - op: add
           path: /services/signoz-telemetrystore-clickhouse-user-scripts/mem_limit
@@ -111,3 +157,16 @@ spec:
       operations:
         - op: remove
           path: /metric_log
+        # Bounded caches for a 6g container. The defaults (5 GiB each for the
+        # mark and index-mark caches) assume a dedicated host.
+        - op: add
+          path: /mark_cache_size
+          value: 1073741824
+        - op: add
+          path: /index_mark_cache_size
+          value: 536870912
+        # "information" writes a lot to the shared disk; warnings and errors
+        # are what anyone reads.
+        - op: replace
+          path: /logger/level
+          value: warning
