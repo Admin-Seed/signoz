@@ -6,7 +6,18 @@ services:
   azure-collector:
     image: otel/opentelemetry-collector-contrib:0.163.2
     container_name: signoz-azure-collector
-    mem_limit: 256m
+    # Memory ceiling. 256m was too small: the otelcol-contrib binary alone is
+    # ~419 MB, and the kernel charges its mapped pages to this cgroup. On
+    # 2026-11-03 the container sat at its limit (memory.events max ~1.1 million,
+    # ~50 million workingset_refault_file) and re-read its own binary from disk
+    # at ~200 MB/s around the clock, saturating the VM's only disk (P10).
+    # 1g fits binary + heap; memswap_limit equal to mem_limit means no swap.
+    # GOMEMLIMIT and the memory_limiter processor keep the Go heap well below it.
+    mem_limit: 1g
+    mem_reservation: 512m
+    memswap_limit: 1g
+    cpus: 1.0
+    init: true
     command:
       - --config=/etc/azure-collector-config.yaml
     volumes:
@@ -16,6 +27,8 @@ services:
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
       - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+      # Soft Go heap target, ~80% of the memory_limiter hard limit (600 MiB).
+      - GOMEMLIMIT=480MiB
     networks:
       - signoz-network
     restart: unless-stopped

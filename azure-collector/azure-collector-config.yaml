@@ -31,8 +31,18 @@ receivers:
       - "rg-api-eastus"
 
 processors:
+  # Must be the first processor in every pipeline. Refuses data before the
+  # heap reaches the container limit instead of letting the kernel kill it.
+  # limit_mib is a heap target: total RSS runs ~50 MiB above it, and the
+  # binary's mapped pages need the rest of the 1g container limit.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 600
+    spike_limit_mib: 120
   batch:
     timeout: 10s
+    send_batch_size: 5000
+    send_batch_max_size: 5000
 
 exporters:
   otlp:
@@ -46,5 +56,5 @@ service:
   pipelines:
     metrics:
       receivers: [azuremonitor]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [otlp]
