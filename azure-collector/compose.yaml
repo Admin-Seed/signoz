@@ -1,5 +1,5 @@
-# Standalone Azure Monitor collector. Deployed as its own Komodo stack so it
-# can be upgraded independently of SigNoz.
+# Standalone Azure Monitor collector. Deployed as its own Compose project so
+# it can be upgraded independently of SigNoz.
 name: signoz-azure-collector
 
 services:
