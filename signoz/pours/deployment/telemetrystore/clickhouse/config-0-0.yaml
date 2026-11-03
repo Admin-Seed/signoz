@@ -8,6 +8,7 @@ error_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 format_schema_path: /var/lib/clickhouse/format_schemas/
 http_port: 8123
+index_mark_cache_size: 536870912
 interserver_http_port: 9009
 latency_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
@@ -17,11 +18,12 @@ logger:
   count: 10
   formatting:
     type: console
-  level: information
+  level: warning
   size: 1000M
 macros:
   replica: example01-01-1
   shard: "01"
+mark_cache_size: 1073741824
 part_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 path: /var/lib/clickhouse/
