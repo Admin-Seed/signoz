@@ -27,8 +27,13 @@ The pre-migration fork is preserved at tag `archive/fork-2026-09-11`.
 # 1. bump the image tags in signoz/casting.yaml
 # 2. regenerate
 cd signoz && foundryctl forge -f casting.yaml
-# 3. commit and push; the Komodo webhook redeploys
+# 3. commit, open a PR, merge; then on the VM:
+/opt/stacks/vm-services/deploy.sh /opt/stacks/signoz/signoz/pours/deployment
 ```
+
+The collector deploys the same way:
+`/opt/stacks/vm-services/deploy.sh /opt/stacks/signoz/azure-collector`.
+There is no Komodo and no webhook any more (removed 2026-11-03).
 
 Check the [upgrade guides](https://signoz.io/docs/operate/upgrade/) first — some
 releases carry one-way migrations (v0.131 ClickHouse 25.12.5, v0.135
@@ -36,8 +41,9 @@ Dashboards V2, v0.137 saved views).
 
 ## Secrets
 
-None are stored here. Komodo holds them and writes a `.env` beside the Compose
-file at deploy time:
+None are stored here. They live in a `.env` beside each Compose file on the VM
+(mode 600, ignored by git): `/opt/stacks/signoz/signoz/pours/deployment/.env`
+and `/opt/stacks/signoz/azure-collector/.env`.
 
 | Stack | Variables |
 | --- | --- |
