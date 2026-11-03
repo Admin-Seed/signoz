@@ -19,7 +19,9 @@ services:
     - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
     - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
     image: signoz/signoz-otel-collector:v0.144.15
-    mem_limit: 768m
+    mem_limit: 1g
+    mem_reservation: 512m
+    memswap_limit: 1g
     networks:
       signoz-network:
         aliases:
@@ -51,7 +53,9 @@ services:
       - http://localhost:8080/api/v1/health
       timeout: 10s
     image: signoz/signoz:v0.147.0
-    mem_limit: 1g
+    mem_limit: 2g
+    mem_reservation: 512m
+    memswap_limit: 2g
     networks:
     - signoz-network
     ports:
@@ -79,7 +83,9 @@ services:
       - ls
       timeout: 10s
     image: clickhouse/clickhouse-keeper:25.12.5
-    mem_limit: 512m
+    mem_limit: 1g
+    mem_reservation: 512m
+    memswap_limit: 1g
     networks:
     - signoz-network
     restart: unless-stopped
@@ -88,6 +94,7 @@ services:
     - ./telemetrykeeper/clickhousekeeper/keeper-0.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
   signoz-telemetrystore-clickhouse-0-0:
     container_name: signoz-telemetrystore-clickhouse-0-0
+    cpus: 4
     depends_on:
       signoz-telemetrykeeper-clickhousekeeper-0:
         condition: service_healthy
@@ -108,10 +115,17 @@ services:
       - http://localhost:8123/ping
       timeout: 10s
     image: clickhouse/clickhouse-server:25.12.5
-    mem_limit: 2.5g
+    mem_limit: 6g
+    mem_reservation: 3g
+    memswap_limit: 6g
     networks:
     - signoz-network
     restart: unless-stopped
+    stop_grace_period: 60s
+    ulimits:
+      nofile:
+        hard: 262144
+        soft: 262144
     volumes:
     - signoz-telemetrystore-0-0-data:/var/lib/clickhouse
     - signoz-telemetrystore-user-scripts:/var/lib/clickhouse/user_scripts:ro

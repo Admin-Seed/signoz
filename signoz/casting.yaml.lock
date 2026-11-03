@@ -373,15 +373,51 @@ spec:
       value: signoz-clickhouse
     - op: add
       path: /services/signoz-telemetrystore-clickhouse-0-0/mem_limit
-      value: 2.5g
+      value: 6g
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/memswap_limit
+      value: 6g
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/mem_reservation
+      value: 3g
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/cpus
+      value: 4
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/ulimits
+      value:
+        nofile:
+          hard: 262144
+          soft: 262144
+    - op: add
+      path: /services/signoz-telemetrystore-clickhouse-0-0/stop_grace_period
+      value: 60s
     - op: add
       path: /services/signoz-signoz-0/mem_limit
-      value: 1g
+      value: 2g
+    - op: add
+      path: /services/signoz-signoz-0/memswap_limit
+      value: 2g
+    - op: add
+      path: /services/signoz-signoz-0/mem_reservation
+      value: 512m
     - op: add
       path: /services/ingester/mem_limit
-      value: 768m
+      value: 1g
+    - op: add
+      path: /services/ingester/memswap_limit
+      value: 1g
+    - op: add
+      path: /services/ingester/mem_reservation
+      value: 512m
     - op: add
       path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_limit
+      value: 1g
+    - op: add
+      path: /services/signoz-telemetrykeeper-clickhousekeeper-0/memswap_limit
+      value: 1g
+    - op: add
+      path: /services/signoz-telemetrykeeper-clickhousekeeper-0/mem_reservation
       value: 512m
     - op: add
       path: /services/signoz-telemetrystore-clickhouse-user-scripts/mem_limit
@@ -393,6 +429,15 @@ spec:
   - operations:
     - op: remove
       path: /metric_log
+    - op: add
+      path: /mark_cache_size
+      value: 1073741824
+    - op: add
+      path: /index_mark_cache_size
+      value: 536870912
+    - op: replace
+      path: /logger/level
+      value: warning
     target: deployment/telemetrystore/clickhouse/config-0-0.yaml
   signoz:
     spec:
